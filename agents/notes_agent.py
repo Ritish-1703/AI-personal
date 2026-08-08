@@ -75,20 +75,37 @@ RULES
   to rephrase or use get_all_memories_tool to show everything saved.
 """
 
+
 def _resolve_api_key() -> str:
-    key = os.getenv("OPENROUTER_API_KEY") or os.getenv("OPENAI_API_KEY")
-    if not key:
-        try:
-            import streamlit as st
-            if hasattr(st, "secrets"):
-                key = st.secrets.get("OPENROUTER_API_KEY") or st.secrets.get("OPENAI_API_KEY")
-        except Exception:
-            pass
-    if not key:
-        raise ValueError(
-            "OPENROUTER_API_KEY is missing! Please add OPENROUTER_API_KEY to your Streamlit Cloud Secrets or local .env file."
-        )
-    return key
+    # 1. Check environment variables
+    for env_var in ["OPENROUTER_API_KEY", "OPENAI_API_KEY", "openrouter_api_key"]:
+        val = os.getenv(env_var)
+        if val and val.strip():
+            return val.strip()
+
+    # 2. Check Streamlit secrets (case-insensitive & nested checks)
+    try:
+        import streamlit as st
+        if hasattr(st, "secrets"):
+            for secret_key in ["OPENROUTER_API_KEY", "openrouter_api_key", "OPENAI_API_KEY"]:
+                if secret_key in st.secrets and isinstance(st.secrets[secret_key], str):
+                    val = st.secrets[secret_key].strip()
+                    if val:
+                        return val
+            # Fuzzy match any secret key containing OPENROUTER or API_KEY
+            for k in st.secrets:
+                if "OPENROUTER" in k.upper() or "API_KEY" in k.upper():
+                    val = st.secrets[k]
+                    if isinstance(val, str) and val.strip():
+                        return val.strip()
+    except Exception:
+        pass
+
+    raise ValueError(
+        "OPENROUTER_API_KEY is not configured in Streamlit Cloud Secrets.\n"
+        "Please click 'Manage app' -> 'Settings' -> 'Secrets' and add:\n"
+        "OPENROUTER_API_KEY = \"sk-or-v1-...\""
+    )
 
 
 class DynamicNotesAgent:
