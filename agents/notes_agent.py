@@ -77,33 +77,41 @@ RULES
 
 
 def _resolve_groq_api_key() -> str:
-    # 1. Check environment variables
-    for env_var in ["GROQ_API_KEY", "groq_api_key", "OPENROUTER_API_KEY", "OPENAI_API_KEY"]:
+    # 1. Check GROQ_API_KEY in environment variables
+    for env_var in ["GROQ_API_KEY", "groq_api_key"]:
         val = os.getenv(env_var)
         if val and val.strip():
             return val.strip()
+
+    # Check for any environment variable starting with gsk_
+    for k, v in os.environ.items():
+        if v and isinstance(v, str) and v.startswith("gsk_"):
+            return v.strip()
 
     # 2. Check Streamlit secrets
     try:
         import streamlit as st
         if hasattr(st, "secrets"):
-            for secret_key in ["GROQ_API_KEY", "groq_api_key", "OPENROUTER_API_KEY", "OPENAI_API_KEY"]:
+            for secret_key in ["GROQ_API_KEY", "groq_api_key"]:
                 if secret_key in st.secrets and isinstance(st.secrets[secret_key], str):
                     val = st.secrets[secret_key].strip()
                     if val:
                         return val
-            # Fuzzy match any secret key containing GROQ or API_KEY
+
+            # Check any secret key containing GROQ or starting with gsk_
             for k in st.secrets:
-                if "GROQ" in k.upper() or "API_KEY" in k.upper():
-                    val = st.secrets[k]
-                    if isinstance(val, str) and val.strip():
-                        return val.strip()
+                val = st.secrets[k]
+                if isinstance(val, str):
+                    if "GROQ" in k.upper() or val.startswith("gsk_"):
+                        if val.strip():
+                            return val.strip()
     except Exception:
         pass
 
     raise ValueError(
-        "GROQ_API_KEY is not configured!\n"
-        "Please add GROQ_API_KEY to your Streamlit Cloud Secrets or local .env file:\n"
+        "GROQ_API_KEY is missing or invalid!\n"
+        "Groq API keys start with 'gsk_...'.\n"
+        "Please update GROQ_API_KEY in Streamlit Cloud (Manage app ➔ Settings ➔ Secrets):\n"
         "GROQ_API_KEY = \"gsk_...\""
     )
 
