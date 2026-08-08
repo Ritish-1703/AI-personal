@@ -26,11 +26,19 @@ from tools.tasks_tools import (
     delete_task_tool,
 )
 
-load_dotenv()
+def _get_api_key() -> str:
+    key = os.getenv("OPENROUTER_API_KEY") or os.getenv("OPENAI_API_KEY")
+    if not key:
+        try:
+            import streamlit as st
+            key = st.secrets.get("OPENROUTER_API_KEY") or st.secrets.get("OPENAI_API_KEY")
+        except Exception:
+            pass
+    return key if key else "missing_api_key"
 
 llm = ChatOpenAI(
     model="openrouter/free",
-    api_key=os.getenv("OPENROUTER_API_KEY"),
+    api_key=_get_api_key(),
     base_url="https://openrouter.ai/api/v1",
 )
 
