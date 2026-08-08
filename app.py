@@ -97,7 +97,7 @@ with st.sidebar:
 # MAIN CHAT AREA
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 st.title("🤖 AI Personal Bot")
-st.caption("Your personal Notes · Memory · Tasks assistant — powered by OpenRouter")
+st.caption("Your personal Notes · Memory · Tasks assistant — powered by Groq")
 
 # Render conversation history
 for msg in st.session_state.messages:
@@ -145,7 +145,7 @@ if user_input:
         error_message = str(e)
         if "429" in error_message or "quota" in error_message.lower() or "rate" in error_message.lower():
             st.warning(
-                "⚠️ OpenRouter API rate limit or quota reached. "
+                "⚠️ Groq API rate limit or quota reached. "
                 "Please wait a moment and try again."
             )
         else:

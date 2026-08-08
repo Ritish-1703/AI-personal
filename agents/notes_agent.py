@@ -2,7 +2,7 @@ import os
 
 from dotenv import load_dotenv
 from langgraph.prebuilt import create_react_agent
-from langchain_openai import ChatOpenAI
+from langchain_groq import ChatGroq
 
 from tools.notes_tools import (
     create_note_tool,
@@ -76,25 +76,25 @@ RULES
 """
 
 
-def _resolve_api_key() -> str:
+def _resolve_groq_api_key() -> str:
     # 1. Check environment variables
-    for env_var in ["OPENROUTER_API_KEY", "OPENAI_API_KEY", "openrouter_api_key"]:
+    for env_var in ["GROQ_API_KEY", "groq_api_key", "OPENROUTER_API_KEY", "OPENAI_API_KEY"]:
         val = os.getenv(env_var)
         if val and val.strip():
             return val.strip()
 
-    # 2. Check Streamlit secrets (case-insensitive & nested checks)
+    # 2. Check Streamlit secrets
     try:
         import streamlit as st
         if hasattr(st, "secrets"):
-            for secret_key in ["OPENROUTER_API_KEY", "openrouter_api_key", "OPENAI_API_KEY"]:
+            for secret_key in ["GROQ_API_KEY", "groq_api_key", "OPENROUTER_API_KEY", "OPENAI_API_KEY"]:
                 if secret_key in st.secrets and isinstance(st.secrets[secret_key], str):
                     val = st.secrets[secret_key].strip()
                     if val:
                         return val
-            # Fuzzy match any secret key containing OPENROUTER or API_KEY
+            # Fuzzy match any secret key containing GROQ or API_KEY
             for k in st.secrets:
-                if "OPENROUTER" in k.upper() or "API_KEY" in k.upper():
+                if "GROQ" in k.upper() or "API_KEY" in k.upper():
                     val = st.secrets[k]
                     if isinstance(val, str) and val.strip():
                         return val.strip()
@@ -102,22 +102,22 @@ def _resolve_api_key() -> str:
         pass
 
     raise ValueError(
-        "OPENROUTER_API_KEY is not configured in Streamlit Cloud Secrets.\n"
-        "Please click 'Manage app' -> 'Settings' -> 'Secrets' and add:\n"
-        "OPENROUTER_API_KEY = \"sk-or-v1-...\""
+        "GROQ_API_KEY is not configured!\n"
+        "Please add GROQ_API_KEY to your Streamlit Cloud Secrets or local .env file:\n"
+        "GROQ_API_KEY = \"gsk_...\""
     )
 
 
 class DynamicNotesAgent:
-    """Wrapper that resolves the API key and initializes the agent dynamically per request."""
+    """Wrapper that resolves the Groq API key and initializes the agent dynamically per request."""
 
     def invoke(self, input_data, config=None, **kwargs):
-        api_key = _resolve_api_key()
+        api_key = _resolve_groq_api_key()
 
-        llm = ChatOpenAI(
-            model="openrouter/free",
+        llm = ChatGroq(
+            model="llama-3.3-70b-versatile",
             api_key=api_key,
-            base_url="https://openrouter.ai/api/v1",
+            temperature=0.3,
         )
 
         agent = create_react_agent(
