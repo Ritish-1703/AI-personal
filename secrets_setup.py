@@ -8,16 +8,18 @@ from dotenv import load_dotenv
 # Load local .env if present
 load_dotenv()
 
-# Copy Streamlit secrets into os.environ
-try:
-    import streamlit as st
-    if hasattr(st, "secrets"):
-        for key in st.secrets:
-            try:
-                val = st.secrets[key]
-                if isinstance(val, str):
-                    os.environ[key] = val
-            except Exception:
-                pass
-except Exception:
-    pass
+def sync_secrets():
+    try:
+        import streamlit as st
+        if hasattr(st, "secrets"):
+            for key in st.secrets:
+                try:
+                    val = st.secrets[key]
+                    if isinstance(val, str):
+                        os.environ.setdefault(key, val)
+                except Exception:
+                    pass
+    except Exception:
+        pass
+
+sync_secrets()

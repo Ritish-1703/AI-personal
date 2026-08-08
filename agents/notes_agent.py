@@ -26,21 +26,7 @@ from tools.tasks_tools import (
     delete_task_tool,
 )
 
-def _get_api_key() -> str:
-    key = os.getenv("OPENROUTER_API_KEY") or os.getenv("OPENAI_API_KEY")
-    if not key:
-        try:
-            import streamlit as st
-            key = st.secrets.get("OPENROUTER_API_KEY") or st.secrets.get("OPENAI_API_KEY")
-        except Exception:
-            pass
-    return key if key else "missing_api_key"
-
-llm = ChatOpenAI(
-    model="openrouter/free",
-    api_key=_get_api_key(),
-    base_url="https://openrouter.ai/api/v1",
-)
+load_dotenv()
 
 SYSTEM_PROMPT = """
 You are a personal AI assistant that manages Notes, Memory, and Tasks.
@@ -89,25 +75,58 @@ RULES
   to rephrase or use get_all_memories_tool to show everything saved.
 """
 
-notes_agent = create_react_agent(
-    model=llm,
-    tools=[
-        # Notes
-        create_note_tool,
-        get_notes_tool,
-        search_notes_tool,
-        update_note_tool,
-        delete_note_tool,
-        # Memory
-        save_memory_tool,
-        get_memory_tool,
-        get_all_memories_tool,
-        delete_memory_tool,
-        # Tasks
-        add_task_tool,
-        get_tasks_tool,
-        complete_task_tool,
-        delete_task_tool,
-    ],
-    prompt=SYSTEM_PROMPT,
-)
+def _resolve_api_key() -> str:
+    key = os.getenv("OPENROUTER_API_KEY") or os.getenv("OPENAI_API_KEY")
+    if not key:
+        try:
+            import streamlit as st
+            if hasattr(st, "secrets"):
+                key = st.secrets.get("OPENROUTER_API_KEY") or st.secrets.get("OPENAI_API_KEY")
+        except Exception:
+            pass
+    if not key:
+        raise ValueError(
+            "OPENROUTER_API_KEY is missing! Please add OPENROUTER_API_KEY to your Streamlit Cloud Secrets or local .env file."
+        )
+    return key
+
+
+class DynamicNotesAgent:
+    """Wrapper that resolves the API key and initializes the agent dynamically per request."""
+
+    def invoke(self, input_data, config=None, **kwargs):
+        api_key = _resolve_api_key()
+
+        llm = ChatOpenAI(
+            model="openrouter/free",
+            api_key=api_key,
+            base_url="https://openrouter.ai/api/v1",
+        )
+
+        agent = create_react_agent(
+            model=llm,
+            tools=[
+                # Notes
+                create_note_tool,
+                get_notes_tool,
+                search_notes_tool,
+                update_note_tool,
+                delete_note_tool,
+                # Memory
+                save_memory_tool,
+                get_memory_tool,
+                get_all_memories_tool,
+                delete_memory_tool,
+                # Tasks
+                add_task_tool,
+                get_tasks_tool,
+                complete_task_tool,
+                delete_task_tool,
+            ],
+            prompt=SYSTEM_PROMPT,
+        )
+
+        return agent.invoke(input_data, config=config, **kwargs)
+
+
+notes_agent = DynamicNotesAgent()
