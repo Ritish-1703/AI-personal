@@ -97,7 +97,7 @@ with st.sidebar:
 # MAIN CHAT AREA
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 st.title("🤖 AI Personal Bot")
-st.caption("Your personal Notes · Memory · Tasks assistant — powered by Groq")
+st.caption("Your personal Notes · Memory · Tasks assistant — powered by Groq & OpenRouter")
 
 # Render conversation history
 for msg in st.session_state.messages:
@@ -143,11 +143,26 @@ if user_input:
 
     except Exception as e:
         error_message = str(e)
-        if "429" in error_message or "quota" in error_message.lower() or "rate" in error_message.lower():
-            st.warning(
-                "⚠️ Groq API rate limit or quota reached. "
-                "Please wait a moment and try again."
-            )
-        else:
-            st.error("Something went wrong.")
-            st.exception(e)
+        with st.chat_message("assistant"):
+            if "429" in error_message or "quota" in error_message.lower() or "rate limit" in error_message.lower():
+                msg = (
+                    "⚠️ **API Rate Limit / Quota Exceeded**\n\n"
+                    "The LLM provider returned a rate limit or quota error. "
+                    "Please wait a moment and try again, or check your API key credits."
+                )
+                st.warning(msg)
+                st.session_state.messages.append({"role": "assistant", "content": msg})
+            elif "401" in error_message or "Invalid API Key" in error_message or "missing" in error_message.lower():
+                msg = (
+                    "⚠️ **Invalid or Missing API Key**\n\n"
+                    "Please configure a valid API key in your **Streamlit Secrets**:\n"
+                    "1. Click **Manage app** (bottom right) ➔ **Settings** ➔ **Secrets**\n"
+                    "2. Add a valid Groq or OpenRouter key:\n"
+                    "```toml\nGROQ_API_KEY = \"gsk_your_groq_key_here\"\n# OR\nOPENROUTER_API_KEY = \"sk-or-v1-your_openrouter_key_here\"\n```"
+                )
+                st.error(msg)
+                st.session_state.messages.append({"role": "assistant", "content": msg})
+            else:
+                msg = f"⚠️ **Service Notice:**\n{error_message}"
+                st.error(msg)
+                st.session_state.messages.append({"role": "assistant", "content": msg})

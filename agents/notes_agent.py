@@ -3,6 +3,7 @@ import os
 from dotenv import load_dotenv
 from langgraph.prebuilt import create_react_agent
 from langchain_groq import ChatGroq
+from langchain_openai import ChatOpenAI
 
 from tools.notes_tools import (
     create_note_tool,
@@ -76,82 +77,98 @@ RULES
 """
 
 
-def _resolve_groq_api_key() -> str:
-    # 1. Check GROQ_API_KEY in environment variables
-    for env_var in ["GROQ_API_KEY", "groq_api_key"]:
-        val = os.getenv(env_var)
-        if val and val.strip():
-            return val.strip()
+def _get_api_keys():
+    """Retrieve Groq and OpenRouter keys from env or st.secrets."""
+    groq_key = os.getenv("GROQ_API_KEY") or os.getenv("GROQ") or os.getenv("groq_api_key")
+    openrouter_key = os.getenv("OPENROUTER_API_KEY") or os.getenv("openrouter_api_key")
 
-    # Check for any environment variable starting with gsk_
-    for k, v in os.environ.items():
-        if v and isinstance(v, str) and v.startswith("gsk_"):
-            return v.strip()
-
-    # 2. Check Streamlit secrets
     try:
         import streamlit as st
         if hasattr(st, "secrets"):
-            for secret_key in ["GROQ_API_KEY", "groq_api_key"]:
-                if secret_key in st.secrets and isinstance(st.secrets[secret_key], str):
-                    val = st.secrets[secret_key].strip()
-                    if val:
-                        return val
-
-            # Check any secret key containing GROQ or starting with gsk_
+            if not groq_key:
+                for k in ["GROQ_API_KEY", "GROQ", "groq_api_key"]:
+                    if k in st.secrets and isinstance(st.secrets[k], str) and st.secrets[k].strip():
+                        groq_key = st.secrets[k].strip()
+                        break
+            if not openrouter_key:
+                for k in ["OPENROUTER_API_KEY", "openrouter_api_key"]:
+                    if k in st.secrets and isinstance(st.secrets[k], str) and st.secrets[k].strip():
+                        openrouter_key = st.secrets[k].strip()
+                        break
+            # Fallback scan for keys starting with gsk_ or sk-or-
             for k in st.secrets:
                 val = st.secrets[k]
                 if isinstance(val, str):
-                    if "GROQ" in k.upper() or val.startswith("gsk_"):
-                        if val.strip():
-                            return val.strip()
+                    if not groq_key and (val.startswith("gsk_") or "GROQ" in k.upper()):
+                        groq_key = val.strip()
+                    elif not openrouter_key and (val.startswith("sk-or-") or "OPENROUTER" in k.upper()):
+                        openrouter_key = val.strip()
     except Exception:
         pass
 
-    raise ValueError(
-        "GROQ_API_KEY is missing or invalid!\n"
-        "Groq API keys start with 'gsk_...'.\n"
-        "Please update GROQ_API_KEY in Streamlit Cloud (Manage app ➔ Settings ➔ Secrets):\n"
-        "GROQ_API_KEY = \"gsk_...\""
-    )
+    return groq_key, openrouter_key
 
 
 class DynamicNotesAgent:
-    """Wrapper that resolves the Groq API key and initializes the agent dynamically per request."""
+    """Wrapper that tries Groq first, falls back to OpenRouter, and handles errors gracefully."""
 
     def invoke(self, input_data, config=None, **kwargs):
-        api_key = _resolve_groq_api_key()
+        groq_key, openrouter_key = _get_api_keys()
 
-        llm = ChatGroq(
-            model="llama-3.3-70b-versatile",
-            api_key=api_key,
-            temperature=0.3,
-        )
+        tools = [
+            create_note_tool,
+            get_notes_tool,
+            search_notes_tool,
+            update_note_tool,
+            delete_note_tool,
+            save_memory_tool,
+            get_memory_tool,
+            get_all_memories_tool,
+            delete_memory_tool,
+            add_task_tool,
+            get_tasks_tool,
+            complete_task_tool,
+            delete_task_tool,
+        ]
 
-        agent = create_react_agent(
-            model=llm,
-            tools=[
-                # Notes
-                create_note_tool,
-                get_notes_tool,
-                search_notes_tool,
-                update_note_tool,
-                delete_note_tool,
-                # Memory
-                save_memory_tool,
-                get_memory_tool,
-                get_all_memories_tool,
-                delete_memory_tool,
-                # Tasks
-                add_task_tool,
-                get_tasks_tool,
-                complete_task_tool,
-                delete_task_tool,
-            ],
-            prompt=SYSTEM_PROMPT,
-        )
+        errors = []
 
-        return agent.invoke(input_data, config=config, **kwargs)
+        # 1. Try Groq if key exists
+        if groq_key:
+            try:
+                llm = ChatGroq(
+                    model="llama-3.3-70b-versatile",
+                    api_key=groq_key,
+                    temperature=0.3,
+                )
+                agent = create_react_agent(model=llm, tools=tools, prompt=SYSTEM_PROMPT)
+                return agent.invoke(input_data, config=config, **kwargs)
+            except Exception as e:
+                errors.append(f"Groq API Error: {str(e)}")
+
+        # 2. Try OpenRouter as fallback if key exists
+        if openrouter_key:
+            try:
+                llm = ChatOpenAI(
+                    model="openrouter/free",
+                    api_key=openrouter_key,
+                    base_url="https://openrouter.ai/api/v1",
+                    temperature=0.3,
+                )
+                agent = create_react_agent(model=llm, tools=tools, prompt=SYSTEM_PROMPT)
+                return agent.invoke(input_data, config=config, **kwargs)
+            except Exception as e:
+                errors.append(f"OpenRouter API Error: {str(e)}")
+
+        # 3. If neither worked, raise informative error
+        if not groq_key and not openrouter_key:
+            raise ValueError(
+                "No API Key found! Please add GROQ_API_KEY (gsk_...) or OPENROUTER_API_KEY in Streamlit Cloud Secrets (Manage app ➔ Settings ➔ Secrets)."
+            )
+        else:
+            raise RuntimeError(
+                "API Request Failed:\n" + "\n".join(errors) + "\n\nPlease check your API key validity or rate limit."
+            )
 
 
 notes_agent = DynamicNotesAgent()
